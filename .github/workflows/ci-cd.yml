@@ -25,7 +25,7 @@ jobs:
           node-version: 22
 
       - name: Install Platform Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Execute TypeScript Compiler (TSC) Verification
         run: npm run lint

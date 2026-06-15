@@ -31,8 +31,8 @@ export default function CompanyTenantConsole() {
         const data = await res.json();
         setTenants(data);
       }
-    } catch (e) {
-      console.error('Error listing tenants:', e);
+    } catch (e: any) {
+      console.warn('[Network] Error listing tenants (temporary connection loss or server initializing):', e.message || e);
     } finally {
       setIsLoading(false);
     }

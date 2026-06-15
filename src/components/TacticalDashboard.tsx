@@ -62,6 +62,18 @@ export default function TacticalDashboard() {
   const [actionLog, setActionLog] = useState<string[]>(['[INFRA] Ops Center started. Waiting for telemetry check-ins...']);
   const [activeSubTab, setActiveSubTab] = useState<'agents' | 'alerts'>('agents');
   
+  // Custom dialog systems to avoid native alert/confirm blockages in iframe
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    type: 'quarantine' | 'kill';
+    agentId: string;
+    hostname: string;
+    pid?: number;
+    processName?: string;
+  } | null>(null);
+
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'warn' | 'error' } | null>(null);
+
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || null;
   
   // Custom manual alert creation state
@@ -71,6 +83,11 @@ export default function TacticalDashboard() {
     title: 'Anomalous Process Behaviour Executed',
     description: 'Manual operator threat injection tracking shell scripts execution.'
   });
+
+  const showToast = (message: string, type: 'success' | 'warn' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // Load state from backend
   const fetchData = async () => {
@@ -106,7 +123,7 @@ export default function TacticalDashboard() {
         }
       }
     } catch (e: any) {
-      console.error('Error fetching dashboard status:', e);
+      console.warn('[Network] Error fetching dashboard status (temporary connection loss or server initializing):', e.message || e);
       addToActionLog(`[ERROR] Backend connection failed: ${e.message}`);
     } finally {
       setIsLoading(false);
@@ -126,33 +143,50 @@ export default function TacticalDashboard() {
   };
 
   // Trigger Device Isolation (Quarantine)
-  const handleQuarantine = async (agentId: string, hostname: string) => {
-    if (!confirm(`Are you sure you want to enforce strict network isolation and quarantine on system: "${hostname}"? \nAll active processes other than init will be forced closed, and mTLS connections revoked.`)) {
-      return;
-    }
-    
+  const handleQuarantine = (agentId: string, hostname: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: 'quarantine',
+      agentId,
+      hostname
+    });
+  };
+
+  const executeQuarantine = async (agentId: string, hostname: string) => {
+    setConfirmDialog(null);
     try {
       addToActionLog(`Dispatching isolating webhook lock to agent ID: ${agentId}`);
       const res = await fetch(`/api/v1/agents/${agentId}/quarantine`, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         addToActionLog(`[SUCCESS] ${data.message}`);
+        showToast(`Agent ${hostname} isolated successfully.`, 'success');
         fetchData();
       } else {
         const errorData = await res.json();
         addToActionLog(`[FAILED] Isolation failed: ${errorData.error}`);
+        showToast(`Failed to isolate ${hostname}.`, 'error');
       }
     } catch (err: any) {
       addToActionLog(`[FAILED] Network error: ${err.message}`);
+      showToast('Network error during quarantine.', 'error');
     }
   };
 
   // Trigger Process Termination
-  const handleKillProcess = async (agentId: string, hostname: string, pid: number, name: string) => {
-    if (!confirm(`Verify: Send forced SIGKILL payload to host "${hostname}" terminating PID ${pid} (${name})?`)) {
-      return;
-    }
+  const handleKillProcess = (agentId: string, hostname: string, pid: number, name: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: 'kill',
+      agentId,
+      hostname,
+      pid,
+      processName: name
+    });
+  };
 
+  const executeKillProcess = async (agentId: string, hostname: string, pid: number, name: string) => {
+    setConfirmDialog(null);
     try {
       addToActionLog(`Demolishing process PID ${pid} (${name}) on host ${hostname}...`);
       const res = await fetch(`/api/v1/agents/${agentId}/kill-process`, {
@@ -162,13 +196,16 @@ export default function TacticalDashboard() {
       });
       if (res.ok) {
         addToActionLog(`[SUCCESS] PID ${pid} terminated on ${hostname}.`);
+        showToast(`PID ${pid} (${name}) terminated.`, 'success');
         fetchData();
       } else {
         const errorData = await res.json();
         addToActionLog(`[FAILED] Termination rejected: ${errorData.error}`);
+        showToast(`Failed to terminate process ${pid}.`, 'error');
       }
     } catch (err: any) {
       addToActionLog(`[FAILED] Network error during SIGKILL dispatch: ${err.message}`);
+      showToast('Network error during process kill.', 'error');
     }
   };
 
@@ -187,12 +224,15 @@ export default function TacticalDashboard() {
       
       if (res.ok) {
         addToActionLog(`[SUCCESS] Threat mitigated perfectly. Incident marked completed.`);
+        showToast(`Mitigation playbook dispatched successfully.`, 'success');
         fetchData();
       } else {
         addToActionLog('[FAILED] Playbook resolution failed.');
+        showToast(`Playbook dispatch failure.`, 'error');
       }
     } catch (err: any) {
       addToActionLog(`[FAILED] Mitigation error: ${err.message}`);
+      showToast(`Playbook dispatch error.`, 'error');
     }
   };
 
@@ -200,7 +240,7 @@ export default function TacticalDashboard() {
   const handleInjectAlert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customAlert.agent_id) {
-      alert('Must select a target host system for manual security event tracking!');
+      showToast('Must select a target host system for manual security event tracking!', 'warn');
       return;
     }
     
@@ -228,10 +268,12 @@ export default function TacticalDashboard() {
 
       if (res.ok) {
         addToActionLog(`[WARNING] Intrusion event payload acknowledged by parser. Threat alert created.`);
+        showToast('Telemetry hack simulated successfully.', 'success');
         fetchData();
       }
     } catch (err: any) {
       addToActionLog(`[FAILED] Ingestion injection error: ${err.message}`);
+      showToast('Telemetry injection failure.', 'error');
     }
   };
 
@@ -582,6 +624,56 @@ export default function TacticalDashboard() {
         </div>
 
       </div>
+
+      {/* Modern custom modal and toast overlay system */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-mono">
+          <div className="bg-zinc-950 border border-zinc-800 max-w-md w-full p-6 rounded-sm shadow-2xl space-y-4">
+            <div className="flex items-center space-x-2.5 text-rose-500">
+              <AlertOctagon className="h-5 w-5 shrink-0 animate-pulse" />
+              <span className="font-bold uppercase tracking-wider text-xs">Security Authorization Requested</span>
+            </div>
+            
+            <p className="text-xs text-zinc-350 leading-relaxed font-sans">
+              {confirmDialog.type === 'quarantine' ? (
+                <span>Are you sure you want to enforce strict network isolation and quarantine on host <strong className="text-white">"{confirmDialog.hostname}"</strong>? All active processes except PID 1 will be killed and mTLS tunnels revoked.</span>
+              ) : (
+                <span>Confirm signature to dispatch SIGKILL payload to host <strong className="text-white">"{confirmDialog.hostname}"</strong> terminating process PID <strong className="text-white">{confirmDialog.pid}</strong> ({confirmDialog.processName})?</span>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 text-xs">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 rounded-sm text-zinc-400 hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmDialog.type === 'quarantine') {
+                    executeQuarantine(confirmDialog.agentId, confirmDialog.hostname);
+                  } else {
+                    executeKillProcess(confirmDialog.agentId, confirmDialog.hostname, confirmDialog.pid!, confirmDialog.processName!);
+                  }
+                }}
+                className="px-4 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-350 hover:text-white font-bold rounded-sm cursor-pointer"
+              >
+                Approve Action
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 text-zinc-100 px-4 py-3 rounded-sm shadow-xl z-50 flex items-center space-x-3 max-w-sm">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${
+            toast.type === 'success' ? 'bg-emerald-400' : toast.type === 'warn' ? 'bg-amber-400' : 'bg-rose-500'
+          }`} />
+          <span className="text-xs font-mono text-zinc-350 leading-normal">{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }

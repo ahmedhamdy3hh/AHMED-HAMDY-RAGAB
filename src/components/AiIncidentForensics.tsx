@@ -81,9 +81,12 @@ export default function AiIncidentForensics() {
     setErrorString(null);
   };
 
+  const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('Mitigation playbook steps copied to clipboard!');
+    setCopiedNotification(true);
+    setTimeout(() => setCopiedNotification(false), 3000);
   };
 
   return (
@@ -272,6 +275,13 @@ export default function AiIncidentForensics() {
         </div>
 
       </div>
+
+      {copiedNotification && (
+        <div className="fixed bottom-6 right-6 bg-zinc-900 border border-zinc-805 text-emerald-400 px-4 py-3 rounded-sm shadow-xl z-50 flex items-center space-x-3 max-w-sm">
+          <span className="w-2 h-2 rounded-full shrink-0 bg-emerald-400 animate-pulse" />
+          <span className="text-xs font-mono leading-normal">Mitigation playbook steps copied to clipboard!</span>
+        </div>
+      )}
     </div>
   );
 }
